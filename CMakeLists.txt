@@ -61,9 +61,11 @@ check_cpu_architecture(arm32 "DAV1D_CPU_ARM32")
 check_cpu_architecture(arm64 "DAV1D_CPU_ARM64")
 check_cpu_architecture(powerpc64 "DAV1D_CPU_PPC64")
 set(ARCH_X86_64 ${DAV1D_CPU_X64})
-set(ARCH_X86 ${DAV1D_CPU_X86})
-if(ARCH_X86_64)
-  set(DAV1D_CPU_X86 1)
+set(ARCH_X86_32 ${DAV1D_CPU_X86})
+if(ARCH_X86_64 OR ARCH_X86_32)
+  set(ARCH_X86 1)
+else()
+  set(ARCH_X86 1)
 endif()
 set(ARCH_X86_32 ${DAV1D_CPU_X86})
 set(ARCH_ARM ${DAV1D_CPU_ARM32})
@@ -72,17 +74,22 @@ set(ARCH_PPC64LE ${DAV1D_CPU_PPC64})
 list(APPEND config01_variables ARCH_X86 ARCH_X86_32 ARCH_X86_64 ARCH_ARM ARCH_AARCH64 ARCH_PPC64LE)
 
 # FIXME: asm not implemented
-set(DAV1D_ASM OFF)
+option(DAV1D_ASM "Build asm files, if available" ON)
 set(DAV1D_BITDEPTHS "8;16" CACHE STRING "enabled bitdepths")
 option(DAV1D_LOG "logging" TRUE)
+
+if(DAV1D_ASM)
+  enable_language(ASM_NASM)
+endif()
 
 foreach(depth 8 16)
   list(APPEND config01_variables CONFIG_${depth}BPC)
   if("${depth}" IN_LIST DAV1D_BITDEPTHS)
-    set(CONFIG_${depth}BPC 1)
+    set(DAV1D_BITDEPTH_${depth} 1)
   else()
-    set(CONFIG_${depth}BPC 0)
+    set(DAV1D_BITDEPTH_${depth} 0)
   endif()
+  set(CONFIG_${depth}BPC ${DAV1D_BITDEPTH_${depth}})
 endforeach()
 
 list(APPEND config01_variables HAVE_ASM)
@@ -194,6 +201,13 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/config.h.in" "${cfg_h}")
 configure_file("${CMAKE_CURRENT_BINARY_DIR}/config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/include/config.h"
 )
+fiLE(READ "${CMAKE_CURRENT_BINARY_DIR}/include/config.h" config_h)
+string(REGEX REPLACE "#define" "%define" config_asm "${config_h}")
+string(REGEX REPLACE "/[*]([ a-zA-Z0-9_#]+)[*]/" ";\\1" config_asm "${config_asm}")
+if(DAV1D_CPU_X86 OR DAV1D_CPU_X64)
+  string(APPEND config_asm "%define private_prefix dav1d\n")
+endif()
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/include/config.asm" "${config_asm}")
 configure_file(include/dav1d/version.h.in include/dav1d/version.h)
 configure_file(include/vcs_version.h.in include/vcs_version.h)
 
@@ -201,6 +215,7 @@ function(dav1d_add_include_directories TARGET)
   target_include_directories(${TARGET}
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
     PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+    PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
     PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/dav1d>"
     PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
     PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include/dav1d>"
@@ -266,4 +281,121 @@ set_property(TARGET dav1d PROPERTY SOVERSION "${dav1d_soversion_major}")
 find_package(Threads)
 if(Threads_FOUND)
   target_link_libraries(dav1d PRIVATE Threads::Threads)
+endif()
+
+if(DAV1D_ASM)
+  if(DAV1D_CPU_ARM64)
+    target_sources(dav1d PRIVATE
+      src/arm/64/itx.S
+      src/arm/64/looprestoration_common.S
+      src/arm/64/msac.S
+      src/arm/64/refmvs.S'
+    )
+    if(DAV1D_BITDEPTH_8)
+      target_sources(dav1d PRIVATE
+        src/arm/64/cdef.S
+        src/arm/64/filmgrain.S
+        src/arm/64/ipred.S
+        src/arm/64/loopfilter.S
+        src/arm/64/looprestoration.S
+        src/arm/64/mc.S
+      )
+    endif()
+    if(DAV1D_BITDEPTH_16)
+      target_sources(dav1d PRIVATE
+        src/arm/64/cdef16.S
+        src/arm/64/filmgrain16.S
+        src/arm/64/ipred16.S
+        src/arm/64/itx16.S
+        src/arm/64/loopfilter16.S
+        src/arm/64/looprestoration16.S
+        src/arm/64/mc16.S
+      )
+    endif()
+  elseif(DAV1D_CPU_ARM32)
+    target_sources(dav1d PRIVATE
+      src/arm/32/itx.S
+      src/arm/32/looprestoration_common.S
+      src/arm/32/msac.S
+      src/arm/32/refmvs.S
+    )
+    if(DAV1D_BITDEPTH_8)
+      target_sources(dav1d PRIVATE
+        src/arm/32/cdef.S
+        src/arm/32/filmgrain.S
+        src/arm/32/ipred.S
+        src/arm/32/loopfilter.S
+        src/arm/32/looprestoration.S
+        src/arm/32/mc.S
+      )
+    endif()
+    if(DAV1D_BITDEPTH_16)
+      target_sources(dav1d PRIVATE
+        src/arm/32/cdef16.S
+        src/arm/32/filmgrain16.S
+        src/arm/32/ipred16.S
+        src/arm/32/itx16.S
+        src/arm/32/loopfilter16.S
+        src/arm/32/looprestoration16.S
+        src/arm/32/mc16.S
+      )
+    endif()
+  elseif(DAV1D_CPU_X86 OR DAV1D_CPU_X64)
+    target_sources(dav1d PRIVATE
+      src/x86/cpu.c
+      src/x86/cpuid.asm
+      src/x86/msac.asm
+      src/x86/refmvs.asm
+      src/x86/itx_avx512.asm
+      src/x86/cdef_avx2.asm
+      src/x86/itx_avx2.asm
+      src/x86/looprestoration_avx2.asm
+      src/x86/cdef_sse.asm
+      src/x86/itx_sse.asm
+    )
+    if(DAV1D_BITDEPTH_8)
+      target_sources(dav1d PRIVATE
+        src/x86/cdef_avx512.asm
+        src/x86/filmgrain_avx512.asm
+        src/x86/ipred_avx512.asm
+        src/x86/loopfilter_avx512.asm
+        src/x86/looprestoration_avx512.asm
+        src/x86/mc_avx512.asm
+        src/x86/filmgrain_avx2.asm
+        src/x86/ipred_avx2.asm
+        src/x86/loopfilter_avx2.asm
+        src/x86/mc_avx2.asm
+        src/x86/filmgrain_sse.asm
+        src/x86/ipred_sse.asm
+        src/x86/loopfilter_sse.asm
+        src/x86/looprestoration_sse.asm
+        src/x86/mc_sse.asm
+      )
+    endif()
+    if(DAV1D_BITDEPTH_16)
+      target_sources(dav1d PRIVATE
+        src/x86/cdef16_avx512.asm
+        src/x86/filmgrain16_avx512.asm
+        src/x86/ipred16_avx512.asm
+        src/x86/itx16_avx512.asm
+        src/x86/loopfilter16_avx512.asm
+        src/x86/looprestoration16_avx512.asm
+        src/x86/mc16_avx512.asm
+        src/x86/cdef16_avx2.asm
+        src/x86/filmgrain16_avx2.asm
+        src/x86/ipred16_avx2.asm
+        src/x86/itx16_avx2.asm
+        src/x86/loopfilter16_avx2.asm
+        src/x86/looprestoration16_avx2.asm
+        src/x86/mc16_avx2.asm
+        src/x86/cdef16_sse.asm
+        src/x86/filmgrain16_sse.asm
+        src/x86/ipred16_sse.asm
+        src/x86/itx16_sse.asm
+        src/x86/loopfilter16_sse.asm
+        src/x86/looprestoration16_sse.asm
+        src/x86/mc16_sse.asm
+      )
+    endif()
+  endif()
 endif()
