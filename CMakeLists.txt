@@ -65,7 +65,7 @@ set(ARCH_X86_32 ${DAV1D_CPU_X86})
 if(ARCH_X86_64 OR ARCH_X86_32)
   set(ARCH_X86 1)
 else()
-  set(ARCH_X86 1)
+  set(ARCH_X86 0)
 endif()
 set(ARCH_X86_32 ${DAV1D_CPU_X86})
 set(ARCH_ARM ${DAV1D_CPU_ARM32})
@@ -73,13 +73,38 @@ set(ARCH_AARCH64 ${DAV1D_CPU_ARM64})
 set(ARCH_PPC64LE ${DAV1D_CPU_PPC64})
 list(APPEND config01_variables ARCH_X86 ARCH_X86_32 ARCH_X86_64 ARCH_ARM ARCH_AARCH64 ARCH_PPC64LE)
 
-# FIXME: asm not implemented
+set(DAV1D_ASM_DEFAULT OFF)
+# FIXME: also enable by default for DAV1D_CPU_PPC64
+if(DAV1D_CPU_X64 OR DAV1D_CPU_X86 OR DAV1D_CPU_ARM32 OR DAV1D_CPU_ARM64)
+  set(DAV1D_ASM_DEFAULT ON)
+endif()
+
+
 option(DAV1D_ASM "Build asm files, if available" ON)
 set(DAV1D_BITDEPTHS "8;16" CACHE STRING "enabled bitdepths")
 option(DAV1D_LOG "logging" TRUE)
 
 if(DAV1D_ASM)
-  enable_language(ASM_NASM)
+  if(DAV1D_CPU_X64 OR DAV1D_CPU_X86)
+    enable_language(ASM_NASM)
+    execute_process(COMMAND ${CMAKE_ASM_NASM_COMPILER} --version
+      RESULT_VARIABLE nasm_rc
+      OUTPUT_VARIABLE nasm_stdout
+    )
+    if(nasm_rc EQUAL 0 AND nasm_stdout MATCHES "version ([0-9.]+) ")
+      set(nasm_version "${CMAKE_MATCH_1}")
+      if(nasm_version VERSION_LESS 2.14)
+        message(FATAL_ERROR "nasm 2.14 or later is required, found ${nasm_version}")
+      endif()
+    else()
+      message(FATAL_ERROR "Failed to determine nasm version")
+    endif()
+  elseif(DAV1D_CPU_ARM32 OR DAV1D_CPU_ARM64)
+    enable_language(ASM)
+
+    check_c_source_compiles("__asm__ (\n\".func cmake_test\"\n\".endfunc\"\n);\n" HAVE_AS_FUNC)
+    list(APPEND config01_variables HAVE_AS_FUNC)
+  endif()
 endif()
 
 foreach(depth 8 16)
@@ -285,11 +310,12 @@ endif()
 
 if(DAV1D_ASM)
   if(DAV1D_CPU_ARM64)
+    target_sources(dav1d PRIVATE src/arm/cpu.c)
     target_sources(dav1d PRIVATE
       src/arm/64/itx.S
       src/arm/64/looprestoration_common.S
       src/arm/64/msac.S
-      src/arm/64/refmvs.S'
+      src/arm/64/refmvs.S
     )
     if(DAV1D_BITDEPTH_8)
       target_sources(dav1d PRIVATE
@@ -313,6 +339,7 @@ if(DAV1D_ASM)
       )
     endif()
   elseif(DAV1D_CPU_ARM32)
+    target_sources(dav1d PRIVATE src/arm/cpu.c)
     target_sources(dav1d PRIVATE
       src/arm/32/itx.S
       src/arm/32/looprestoration_common.S
@@ -397,5 +424,9 @@ if(DAV1D_ASM)
         src/x86/mc16_sse.asm
       )
     endif()
+  elseif(DAV1D_CPU_PPC64)
+    message(FATAL_ERROR "ppc64 not implemented (configure with -DDAV1D_ASM=OFF, or create a pr)")
+  else()
+    message(FATAL_ERROR "Unknown archivecture (configure with -DDAV1D_ASM=OFF)")
   endif()
 endif()
