@@ -74,8 +74,7 @@ set(ARCH_PPC64LE ${DAV1D_CPU_PPC64})
 list(APPEND config01_variables ARCH_X86 ARCH_X86_32 ARCH_X86_64 ARCH_ARM ARCH_AARCH64 ARCH_PPC64LE)
 
 set(DAV1D_ASM_DEFAULT OFF)
-# FIXME: also enable by default for DAV1D_CPU_PPC64
-if(DAV1D_CPU_X64 OR DAV1D_CPU_X86 OR DAV1D_CPU_ARM32 OR DAV1D_CPU_ARM64)
+if(DAV1D_CPU_X64 OR DAV1D_CPU_X86 OR DAV1D_CPU_ARM32 OR DAV1D_CPU_ARM64 OR DAV1D_CPU_PPC64)
   set(DAV1D_ASM_DEFAULT ON)
 endif()
 
@@ -263,6 +262,12 @@ set(dav1d_bitdepth_sources
   src/mc_tmpl.c
   src/recon_tmpl.c
 )
+if(DAV!D_ASM AND DAV1D_CPU_PPC64)
+  list(APPEND dav1d_bitdepth_sources
+    src/ppc/cdef_tmpl.c
+    src/ppc/looprestoration_tmpl.c
+  )
+endif()
 set(dav1d_depth_objects)
 foreach(depth IN LISTS DAV1D_BITDEPTHS)
   add_library(dav1d_depth_${depth} OBJECT ${dav1d_bitdepth_sources})
@@ -425,7 +430,8 @@ if(DAV1D_ASM)
       )
     endif()
   elseif(DAV1D_CPU_PPC64)
-    message(FATAL_ERROR "ppc64 not implemented (configure with -DDAV1D_ASM=OFF, or create a pr)")
+    target_sources(dav1d PRIVATE src/ppc/cpu.c)
+    target_link_options(dav1d INTERFACE -maltivec -mvsx)
   else()
     message(FATAL_ERROR "Unknown archivecture (configure with -DDAV1D_ASM=OFF)")
   endif()
