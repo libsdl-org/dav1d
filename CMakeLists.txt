@@ -86,11 +86,11 @@ option(DAV1D_LOG "logging" TRUE)
 if(DAV1D_ASM)
   if(DAV1D_CPU_X64 OR DAV1D_CPU_X86)
     enable_language(ASM_NASM)
-    execute_process(COMMAND ${CMAKE_ASM_NASM_COMPILER} --version
+    execute_process(COMMAND ${CMAKE_ASM_NASM_COMPILER} -v
       RESULT_VARIABLE nasm_rc
       OUTPUT_VARIABLE nasm_stdout
     )
-    if(nasm_rc EQUAL 0 AND nasm_stdout MATCHES "version ([0-9.]+) ")
+    if(nasm_rc EQUAL 0 AND nasm_stdout MATCHES "version ([0-9][0-9.]+)")
       set(nasm_version "${CMAKE_MATCH_1}")
       if(nasm_version VERSION_LESS 2.14)
         message(FATAL_ERROR "nasm 2.14 or later is required, found ${nasm_version}")
