@@ -276,7 +276,7 @@ foreach(depth IN LISTS DAV1D_BITDEPTHS)
   list(APPEND dav1d_depth_objects $<TARGET_OBJECTS:dav1d_depth_${depth}>)
 endforeach()
 
-add_library(dav1d STATIC
+add_library(dav1d
   src/cdf.c
   src/cpu.c
   src/data.c
@@ -308,6 +308,10 @@ endif()
 dav1d_add_include_directories(dav1d)
 set_property(TARGET dav1d PROPERTY VERSION "${dav1d_soversion}")
 set_property(TARGET dav1d PROPERTY SOVERSION "${dav1d_soversion_major}")
+set_property(TARGET dav1d PROPERTY DEFINE_SYMBOL "DAV1D_BUILDING_DLL")
+if(WIN32 AND BUILD_SHARED_LIBS)
+  set_property(TARGET dav1d PROPERTY PREFIX "")
+endif()
 find_package(Threads)
 if(Threads_FOUND)
   target_link_libraries(dav1d PRIVATE Threads::Threads)
