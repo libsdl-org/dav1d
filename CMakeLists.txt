@@ -85,6 +85,12 @@ option(DAV1D_LOG "logging" TRUE)
 
 if(DAV1D_ASM)
   if(DAV1D_CPU_X64 OR DAV1D_CPU_X86)
+    # Enable ASM as well to avoid the following CMake error in the SDL_image super project:
+    #   CMake Error: Error required internal CMake variable not set, cmake may not be built correctly.
+    #   Missing variable is:
+    #   CMAKE_ASM_COMPILE_OBJECT
+    # (reproducer args: -DSDL3IMAGE_VENDORED=ON -DSDL3IMAGE_JPG=ON -DSDL3IMAGE_BACKEND_STB=OFF -DSDL3IMAGE_AVIF=ON -DDAV1D_ASM=ON)
+    enable_language(ASM)
     enable_language(ASM_NASM)
     execute_process(COMMAND ${CMAKE_ASM_NASM_COMPILER} -v
       RESULT_VARIABLE nasm_rc
