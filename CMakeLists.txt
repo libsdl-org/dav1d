@@ -109,7 +109,41 @@ if(DAV1D_ASM)
     endif()
     check_c_source_compiles("int main(void) {\n#ifndef __AVX__\nerror no avx\n#endif\nreturn 0;}" DAV1D_WITH_AVX)
   elseif(DAV1D_CPU_ARM32 OR DAV1D_CPU_ARM64)
-    enable_language(ASM)
+    if(MSVC)
+        cmake_minimum_required(VERSION 3.26)
+        enable_language(ASM_MARMASM)
+        find_package(Perl REQUIRED)
+        enable_language(ASM_MARMASM)
+        if(DAV1D_CPU_ARM32)
+          set(gasp_arch "arm")
+          set(gasp_cc "armasm")
+          set(gasp_cc "${CMAKE_ASM_MARMASM_COMPILER}")
+        elseif(DAV1D_CPU_ARM64)
+            set(gasp_arch "arm64")
+            set(gasp_cc "armasm64")
+            set(gasp_cc "${CMAKE_ASM_MARMASM_COMPILER}")
+        endif()
+        function(add_gaspp_sources TARGET)
+          foreach(source ${ARGN})
+            get_filename_component(dir "${source}" DIRECTORY)
+            get_filename_component(dir "${source}" DIRECTORY)
+
+            get_filename_component(name_we "${source}" NAME_WE)
+            set(copy "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}.dir/${dir}/${name_we}.S")
+            execute_process(COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/${source}" "${copy}")
+
+            set(obj "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}.dir/${dir}/${name_we}.o")
+            add_custom_command(OUTPUT ${obj}
+              COMMAND ${PERL_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/gas-preprocessor/gas-preprocessor.pl"
+                -as-type armasm -arch ${gasp_arch} -verbose --
+                "${gasp_cc}" -nologo "-I${CMAKE_CURRENT_SOURCE_DIR}" "-I${CMAKE_CURRENT_BINARY_DIR}/include" "${copy}" -c
+            )
+            target_sources(${TARGET} PRIVATE ${obj})
+          endforeach()
+        endfunction()
+    else()
+        enable_language(ASM)
+    endif()
 
     check_c_source_compiles("__asm__ (\n\".func cmake_test\"\n\".endfunc\"\n);\n" HAVE_AS_FUNC)
     list(APPEND config01_variables HAVE_AS_FUNC)
@@ -224,7 +258,7 @@ function(add_compile_option_if_supported)
   foreach(opt IN LISTS ARGV)
     check_c_compiler_flag("${opt}" COMPILER_SUPPORTS_${opt})
     if(COMPILER_SUPPORTS_${opt})
-      add_compile_options(${opt})
+      add_compile_options($<$<COMPILE_LANGUAGE:C>:${opt}>)
     endif()
   endforeach()
   cmake_pop_check_state()
@@ -361,7 +395,7 @@ set_property(TARGET dav1d PROPERTY DEFINE_SYMBOL "DAV1D_BUILDING_DLL")
 
 if(APPLE)
   target_link_options(dav1d PRIVATE "-Wl,-undefined,error")
-elseif(NOT CMAKE_SYSTEM_NAME MATCHES "kOpenBSD.*|OpenBSD.*")
+elseif(NOT CMAKE_SYSTEM_NAME MATCHES "kOpenBSD.*|OpenBSD.*" AND NOT MSVC)
   check_linker_flag(C "-Wl,--no-undefined" LINKER_SUPPORTS_NO_UNDEFINED)
   if(LINKER_SUPPORTS_NO_UNDEFINED)
     target_link_options(dav1d PRIVATE "-Wl,--no-undefined")
@@ -370,15 +404,19 @@ endif()
 
 if(DAV1D_ASM)
   if(DAV1D_CPU_ARM64)
+    set(asm_arm64_sources )
     target_sources(dav1d PRIVATE src/arm/cpu.c)
-    target_sources(dav1d PRIVATE
+    list(APPEND asm_arm64_sources
       src/arm/64/itx.S
+      src/arm/64/cdef_tmpl.S
       src/arm/64/looprestoration_common.S
+      src/arm/64/looprestoration_tmpl.S
       src/arm/64/msac.S
       src/arm/64/refmvs.S
+      src/arm/64/util.S
     )
     if(DAV1D_BITDEPTH_8)
-      target_sources(dav1d PRIVATE
+      list(APPEND asm_arm64_sources
         src/arm/64/cdef.S
         src/arm/64/filmgrain.S
         src/arm/64/ipred.S
@@ -388,7 +426,7 @@ if(DAV1D_ASM)
       )
     endif()
     if(DAV1D_BITDEPTH_16)
-      target_sources(dav1d PRIVATE
+      list(APPEND asm_arm64_sources
         src/arm/64/cdef16.S
         src/arm/64/filmgrain16.S
         src/arm/64/ipred16.S
@@ -398,16 +436,25 @@ if(DAV1D_ASM)
         src/arm/64/mc16.S
       )
     endif()
+    if(MSVC)
+      add_gaspp_sources(dav1d ${asm_arm64_sources})
+    else()
+      target_sources(dav1d PRIVATE ${asm_arm64_sources})
+    endif()
   elseif(DAV1D_CPU_ARM32)
+    set(asm_arm32_sources)
     target_sources(dav1d PRIVATE src/arm/cpu.c)
-    target_sources(dav1d PRIVATE
+    list(APPEND asm_arm32_sources
+      src/arm/32/cdef_tmpl.S
       src/arm/32/itx.S
       src/arm/32/looprestoration_common.S
+      src/arm/32/looprestoration_tmpl.S
       src/arm/32/msac.S
       src/arm/32/refmvs.S
+      src/arm/32/util.S
     )
     if(DAV1D_BITDEPTH_8)
-      target_sources(dav1d PRIVATE
+      list(APPEND asm_arm32_sources
         src/arm/32/cdef.S
         src/arm/32/filmgrain.S
         src/arm/32/ipred.S
@@ -417,7 +464,7 @@ if(DAV1D_ASM)
       )
     endif()
     if(DAV1D_BITDEPTH_16)
-      target_sources(dav1d PRIVATE
+      list(APPEND asm_arm32_sources
         src/arm/32/cdef16.S
         src/arm/32/filmgrain16.S
         src/arm/32/ipred16.S
@@ -426,6 +473,11 @@ if(DAV1D_ASM)
         src/arm/32/looprestoration16.S
         src/arm/32/mc16.S
       )
+    endif()
+    if(MSVC)
+      add_gaspp_sources(dav1d ${asm_arm32_sources})
+    else()
+      target_sources(dav1d PRIVATE ${asm_arm32_sources})
     endif()
   elseif(DAV1D_CPU_X86 OR DAV1D_CPU_X64)
     target_sources(dav1d PRIVATE
