@@ -81,7 +81,7 @@ if(DAV1D_CPU_X64 OR DAV1D_CPU_X86 OR DAV1D_CPU_ARM32 OR DAV1D_CPU_ARM64 OR DAV1D
 endif()
 
 
-option(DAV1D_ASM "Build asm files, if available" ON)
+option(DAV1D_ASM "Build asm files, if available" ${DAV1D_ASM_DEFAULT})
 set(DAV1D_BITDEPTHS "8;16" CACHE STRING "enabled bitdepths")
 option(DAV1D_LOG "logging" TRUE)
 
