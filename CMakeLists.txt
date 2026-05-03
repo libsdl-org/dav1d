@@ -388,6 +388,7 @@ add_library(dav1d
   src/wedge.c
   ${dav1d_depth_objects}
 )
+add_library(dav1d::dav1d ALIAS dav1d)
 if("c_std_99" IN_LIST CMAKE_C_COMPILE_FEATURES)
   target_compile_features(dav1d PRIVATE c_std_99)
 else()
