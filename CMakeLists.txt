@@ -85,6 +85,8 @@ option(DAV1D_ASM "Build asm files, if available" ${DAV1D_ASM_DEFAULT})
 set(DAV1D_BITDEPTHS "8;16" CACHE STRING "enabled bitdepths")
 option(DAV1D_LOG "logging" TRUE)
 
+option(DAV1D_BUILD_SHARED "Build dav1d as a shared library" ${BUILD_SHARED_LIBS})
+
 list(APPEND config_variables PREFIX)
 if(DAV1D_ASM)
   if(DAV1D_CPU_X64 OR DAV1D_CPU_X86)
@@ -369,7 +371,13 @@ foreach(depth IN LISTS DAV1D_BITDEPTHS)
   list(APPEND dav1d_depth_objects $<TARGET_OBJECTS:dav1d_depth_${depth}>)
 endforeach()
 
-add_library(dav1d
+if(DAV1D_BUILD_SHARED)
+  set(DAV1D_LIBRARY_TYPE SHARED)
+else()
+  set(DAV1D_LIBRARY_TYPE STATIC)
+endif()
+
+add_library(dav1d ${DAV1D_LIBRARY_TYPE}
   src/cdf.c
   src/cpu.c
   src/data.c
@@ -396,6 +404,11 @@ add_library(dav1d
   ${dav1d_depth_objects}
 )
 add_library(dav1d::dav1d ALIAS dav1d)
+
+if(NOT DAV1D_BUILD_SHARED)
+  set_target_properties(dav1d PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
+
 if("c_std_99" IN_LIST CMAKE_C_COMPILE_FEATURES)
   target_compile_features(dav1d PRIVATE c_std_99)
 else()
